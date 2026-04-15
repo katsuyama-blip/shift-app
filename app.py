@@ -1,41 +1,42 @@
 import streamlit as st
 
 # --- ページ設定 ---
-st.set_page_config(page_title="神シフト作成：隙間なし・崩れなし版", layout="centered")
+st.set_page_config(page_title="神シフト作成：完全修正版", layout="centered")
 
-# --- 隙間をなくしつつ、形をキープする魔法のCSS ---
+# --- 崩れを防止しつつ密着させる最強CSS ---
 st.markdown("""
     <style>
-    /* 縦方向の隙間を消す */
+    /* 設定エリアの見た目 */
+    .config-box {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #ffb6c1;
+        margin-bottom: 20px;
+    }
+
+    /* カレンダーの列が潰れないように固定 */
+    [data-testid="column"] {
+        min-width: 50px !important;
+        padding: 0px 1px !important;
+    }
+    
+    /* 縦方向の隙間をカット */
     [data-testid="stVerticalBlock"] > div {
         gap: 0px !important;
     }
-    /* 横方向の行の隙間を消す */
-    [data-testid="stHorizontalBlock"] {
-        gap: 0px !important;
-    }
-    
-    /* カラム（列）の設定：幅を均等にして余計なパディングを削る */
-    [data-testid="column"] {
-        flex: 1 1 0% !important;
-        min-width: 0px !important;
-        padding: 0px !important;
-        margin: 0px !important;
-    }
 
-    /* ボタンのデザイン：幅100%で隣と密着させる */
+    /* ボタンを正方形に近い形に固定 */
     div.stButton > button {
         width: 100% !important;
-        height: 65px !important;
-        border-radius: 0px !important; /* 四角くして密着 */
+        height: 70px !important;
+        border-radius: 0px !important;
         margin: 0px !important;
-        padding: 0px !important;
-        border: 1px solid #eeeeee !important; /* 薄い線で区切る */
-        font-size: 14px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
+        padding: 2px !important;
+        border: 1px solid #ddd !important;
+        font-size: 13px !important;
+        font-weight: bold !important;
+        line-height: 1.2 !important;
     }
 
     /* 曜日ヘッダー */
@@ -44,10 +45,9 @@ st.markdown("""
         color: #ff69b4;
         text-align: center;
         background-color: #fdfdfd;
-        border: 1px solid #eeeeee;
+        border: 1px solid #ddd;
         padding: 10px 0;
         font-size: 14px;
-        width: 100%;
     }
 
     /* 月ヘッダー */
@@ -69,19 +69,23 @@ if "requests" not in st.session_state:
 
 st.title("🌸 シフト自動作成アプリ")
 
-# 設定
-with st.sidebar:
-    st.write("### ⚙️ 設定")
-    off_count = st.number_input("公休回数：", value=8)
+# --- 設定エリア（メイン画面に配置） ---
+st.markdown("<div class='config-box'>", unsafe_allow_html=True)
+col_a, col_b = st.columns(2)
+with col_a:
+    target_month = st.selectbox("📅 対象月：", ["2026年6月分", "2026年7月分"])
+with col_b:
+    off_count = st.number_input("🔢 公休回数：", value=8)
+st.markdown("</div>", unsafe_allow_html=True)
 
 st.write("### ｜ ステップ1：希望入力")
 staff_list = ["板橋", "佐野", "山本", "坂田", "A", "時短さん"]
-selected_staff = st.selectbox("スタッフを選択：", staff_list)
+selected_staff = st.selectbox("👤 スタッフを選択：", staff_list)
 
 if selected_staff not in st.session_state.requests:
     st.session_state.requests[selected_staff] = {}
 
-# 合計休み数チェック
+# 警告チェック用（合計休み数）
 def get_total_offs_per_day():
     counts = {}
     for staff in st.session_state.requests:
@@ -101,7 +105,7 @@ def draw_calendar(month_label, start_day, end_day):
     for i, wd in enumerate(weekdays):
         cols[i].markdown(f"<div class='weekday-header'>{wd}</div>", unsafe_allow_html=True)
 
-    # 日付ボタンを1週間（7日）ごとに並べる
+    # 日付ボタンを7日ごとに折り返して表示
     current_day = start_day
     while current_day <= end_day:
         row_cols = st.columns(7)
@@ -109,7 +113,10 @@ def draw_calendar(month_label, start_day, end_day):
             if current_day <= end_day:
                 date_key = f"{month_label}/{current_day}"
                 state = st.session_state.requests[selected_staff].get(date_key, 0)
-                warning = " ⚠️" if total_offs.get(date_key, 0) >= 3 else ""
+                
+                # 警告アイコン（3人以上休み）
+                count = total_offs.get(date_key, 0)
+                warning = "⚠️" if count >= 3 else ""
                 
                 if state == 1:
                     label = f"公休\n{current_day}{warning}"
@@ -118,20 +125,21 @@ def draw_calendar(month_label, start_day, end_day):
                     label = f"有給\n{current_day}{warning}"
                     bg = "#ffa500"
                 else:
-                    label = f"{current_day}{warning}"
+                    label = f"\n{current_day}{warning}" # 白の状態はシンプルに
                     bg = "#ffffff"
 
                 if row_cols[i].button(label, key=f"btn_{date_key}"):
                     st.session_state.requests[selected_staff][date_key] = (state + 1) % 3
                     st.rerun()
                 
-                # ボタン色設定
-                st.markdown(f"<style>div[data-testid='stButton'] button[key='btn_{date_key}'] {{ background-color: {bg} !important; }}</style>", unsafe_allow_html=True)
+                # 個別に色を設定
+                st.markdown(f"<style>div[data-testid='stButton'] button[key='btn_{date_key}'] {{ background-color: {bg} !important; color: black !important; }}</style>", unsafe_allow_html=True)
                 current_day += 1
 
 draw_calendar("6", 11, 30)
 draw_calendar("7", 1, 10)
 
 st.write("---")
-if st.button("🚀 この希望でシフトを作成する", type="primary", use_container_width=True):
+if st.button("🚀 この希望内容でシフトを自動作成する", type="primary", use_container_width=True):
     st.balloons()
+    st.success("スプレッドシートへの保存機能は、次のステップで実装します！")
