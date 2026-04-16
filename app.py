@@ -151,4 +151,54 @@ with tab1:
         st.markdown(f"<div class='month-bar'>{month_label}月</div>", unsafe_allow_html=True)
         
         # 曜日ヘッダー
-        weekdays = ["月", "火",
+        weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+        cols = st.columns(7)
+        for i, wd in enumerate(weekdays):
+            cols[i].markdown(f"<div class='weekday'>{wd}</div>", unsafe_allow_html=True)
+    
+        # 日付ボタンを1週間（7日）ごとに並べる
+        current_day = start_day
+        while current_day <= end_day:
+            row_cols = st.columns(7)
+            for i in range(7):
+                if current_day <= end_day:
+                    date_key = f"{month_label}/{current_day}"
+                    
+                    # 今のスタッフの状態
+                    state = st.session_state.requests[selected_staff].get(date_key, 0)
+                    
+                    # 警告アイコン
+                    warning = "⚠️" if total_offs.get(date_key, 0) >= 3 else ""
+                    
+                    # 状態に応じたラベル（日付を大きく表示するためのHTMLハック）
+                    # ユーザーの理想の「箱の中に大きく文字」を実現
+                    # 日付をpタグに、公休・有給をspanタグに入れることでCSSでフォントサイズを別々に制御
+                    if state == 1:
+                        label = f"<span>公休</span><p>{current_day}</p>{warning}"
+                    elif state == 2:
+                        label = f"<span>有給</span><p>{current_day}</p>{warning}"
+                    else:
+                        label = f"<p>{current_day}</p>{warning}"
+    
+                    # ボタン（HTMLを許可）
+                    if row_cols[i].button(label, key=f"btn_{date_key}", unsafe_allow_html=True):
+                        # 状態をサイクルさせる (0 -> 1 -> 2 -> 0)
+                        new_state = (state + 1) % 3
+                        st.session_state.requests[selected_staff][date_key] = new_state
+                        st.rerun() # 画面を更新して色を反映
+                    current_day += 1
+    
+    # カレンダー呼び出し（スタッフ休み希望モード）
+    draw_calendar("6", 11, 30)
+    draw_calendar("7", 1, 10)
+
+# --- タブ2：全員出勤日（会議）設定 ---
+with tab2:
+    st.write("### 🏢 全員出勤日（ミーティング）を設定")
+    st.info("ここに昨日の全員出勤日設定のロジックが組み込まれます。")
+    # 例： st.date_input とか st.multiselect で日付を選ぶ
+
+st.write("---")
+# 自動作成ボタン
+if st.button("✨ シフト自動作成開始（スプレッドシート連動）", type="primary", use_container_width=True):
+    st.balloons()
