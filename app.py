@@ -1,128 +1,154 @@
 import streamlit as st
+import pandas as pd
+import datetime
 
-# --- ページ設定 ---
-st.set_page_config(page_title="神シフト作成：完成版", layout="centered")
+# --- 1. ページ設定（ユーザーの理想を実現するためにワイド画面に挑戦） ---
+st.set_page_config(page_title="神シフト作成：究極カレンダー版", layout="wide")
 
-# --- 究極のCSS（色・隙間・崩れ防止） ---
+# --- 2. 究極のCSS（ユーザーの理想の見た目と機能性を両立） ---
 st.markdown("""
     <style>
-    /* 1. タイトル下の謎の空欄を消し、設定エリアを綺麗にする */
-    [data-testid="stExpander"] { border: 1px solid #ffb6c1; border-radius: 10px; }
+    /* 設定エリアの枠 */
+    [data-testid="stExpander"] { border: 2px solid #ffb6c1; border-radius: 10px; background-color: #fffaf0; }
     
-    /* 2. カレンダーの「個室」を正しく作る */
-    .stButton > button {
+    /* カレンダー全体の設定（隙間をゼロに、崩れ防止） */
+    [data-testid="stHorizontalBlock"] {
+        gap: 0px !important;
+        padding-top: 0px !important;
+    }
+    
+    /* カラム（列）の設定：幅を均等にして、崩れない最低の幅を確保 */
+    [data-testid="column"] {
+        flex: 1 1 0% !important;
+        min-width: 0px !important;
+        padding: 0px !important;
+        margin: 0px !important;
+    }
+
+    /* 【究極のボタン】画像のような見た目を実現 */
+    div.stButton > button {
         width: 100% !important;
-        min-height: 70px !important;
+        height: 100px !important; /* セルを大きく */
         border-radius: 0px !important;
         margin: 0px !important;
         padding: 0px !important;
-        border: 0.5px solid #eee !important;
+        border: 1px solid #ddd !important;
         font-weight: bold !important;
-        display: block !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background-color: white;
+        color: black;
     }
 
-    /* 3. 【最重要】文字を見て色を変える（魔法のセレクタ） */
+    /* 状態ごとのボタンの色（魔法のセレクタで確実に上書き） */
     /* 公休（ピンク） */
-    button:has(div p:contains("公休")) {
+    div.stButton > button:has(p:contains("公休")) {
         background-color: #ffb6c1 !important;
         color: white !important;
     }
     /* 有給（オレンジ） */
-    button:has(div p:contains("有給")) {
+    div.stButton > button:has(p:contains("有給")) {
         background-color: #ffa500 !important;
         color: white !important;
     }
-
-    /* 4. 隙間をピシッと埋める */
-    [data-testid="column"] {
-        padding: 0px !important;
-        margin: 0px !important;
-    }
-    [data-testid="stHorizontalBlock"] {
-        gap: 0px !important;
-    }
     
+    /* ミーティング日（ダミー：後ほど実装） */
+    div.stButton > button:has(p:contains("全員")) {
+        background-color: #87ceeb !important; /* 水色 */
+        color: white !important;
+    }
+
+    /* 警告のビックリマーク */
+    .warning-icon {
+        color: red;
+        font-weight: bold;
+        font-size: 20px;
+    }
+
     /* 曜日ヘッダー */
     .weekday {
         text-align: center;
         background-color: #f8f9fa;
         color: #ff69b4;
         font-weight: bold;
-        border: 0.5px solid #eee;
+        border: 1px solid #ddd;
         padding: 10px 0;
-        font-size: 0.8em;
+        font-size: 1.2em; /* 曜日を大きく */
     }
     .month-bar {
         background-color: #ffb6c1;
         color: white;
         text-align: center;
         font-weight: bold;
-        padding: 5px;
-        margin-top: 15px;
+        padding: 10px;
+        font-size: 1.5em; /* 月を大きく */
+        margin-top: 20px;
+    }
+    
+    /* フォントサイズの調整（日付を画像のように大きく） */
+    div.stButton > button div p {
+        font-size: 2.5em !important; /* 日付を大きく */
+        margin: 0px !important;
+        padding: 0px !important;
+    }
+    /* 公休・有給の文字サイズ */
+    div.stButton > button div span {
+        font-size: 0.8em !important; 
+        margin: 0px !important;
+        padding: 0px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# データの記録
+# --- 3. セッション状態の初期化 ---
 if "requests" not in st.session_state:
-    st.session_state.requests = {}
+    st.session_state.requests = {} # {スタッフ名: {日付: 状態(0,1,2)}}
 
-st.title("🌸 シフト自動作成アプリ")
+if "meeting_days" not in st.session_state:
+    st.session_state.meeting_days = {} # {日付: True}
 
-# --- 設定エリア（枠で囲む） ---
+# --- 4. メイン画面 ---
+st.title("🌸 神シフト作成：究極カレンダー版")
+
+# 設定エリア（前回の枠を維持）
+st.markdown("<div class='config-box'>", unsafe_allow_html=True)
 with st.container(border=True):
     col_a, col_b = st.columns(2)
     with col_a:
-        target_month = st.selectbox("📅 対象月", ["2026年6月分", "2026年7月分"])
+        target_month = st.selectbox("📅 対象月：", ["2026年6月分", "2026年7月分"])
     with col_b:
-        off_count = st.number_input("🔢 公休回数", value=8)
+        off_count = st.number_input("🔢 公休回数：", value=8)
+st.markdown("</div>", unsafe_allow_html=True)
 
 st.write("### ｜ ステップ1：希望入力")
-staff_list = ["板橋", "佐野", "山本", "坂田", "A", "時短さん"]
-selected_staff = st.selectbox("👤 スタッフを選択", staff_list)
 
-if selected_staff not in st.session_state.requests:
-    st.session_state.requests[selected_staff] = {}
+# モード切替（ミーティング設定タブの復活）
+tab1, tab2 = st.tabs(["休み希望（スタッフ）", "全員出勤日（会議）設定"])
 
-# 警告チェック
-total_offs = {}
-for staff, days in st.session_state.requests.items():
-    for d, s in days.items():
-        if s > 0: total_offs[d] = total_offs.get(d, 0) + 1
-
-# --- カレンダー描画 ---
-def draw_calendar(month_name, start_day, end_day):
-    st.markdown(f"<div class='month-bar'>{month_name}月</div>", unsafe_allow_html=True)
+# --- タブ1：休み希望（スタッフ） ---
+with tab1:
+    staff_list = ["板橋", "佐野", "山本", "坂田", "A", "時短さん"]
+    selected_staff = st.selectbox("👤 スタッフを選択：", staff_list)
     
-    # 曜日
-    weekdays = ["月", "火", "水", "木", "金", "土", "日"]
-    cols = st.columns(7)
-    for i, wd in enumerate(weekdays):
-        cols[i].markdown(f"<div class='weekday'>{wd}</div>", unsafe_allow_html=True)
-
-    # 日付
-    day = start_day
-    while day <= end_day:
-        cols = st.columns(7)
-        for i in range(7):
-            if day <= end_day:
-                date_key = f"{month_name}/{day}"
-                state = st.session_state.requests[selected_staff].get(date_key, 0)
-                warning = "⚠️" if total_offs.get(date_key, 0) >= 3 else ""
-                
-                # ラベル作成
-                if state == 1: label = f"公休\n{day}{warning}"
-                elif state == 2: label = f"有給\n{day}{warning}"
-                else: label = f"\n{day}{warning}"
-
-                if cols[i].button(label, key=f"b_{date_key}"):
-                    st.session_state.requests[selected_staff][date_key] = (state + 1) % 3
-                    st.rerun()
-                day += 1
-
-draw_calendar("6", 11, 30)
-draw_calendar("7", 1, 10)
-
-st.write("---")
-if st.button("🚀 この内容でシフトを作成する", type="primary", use_container_width=True):
-    st.balloons()
+    if selected_staff not in st.session_state.requests:
+        st.session_state.requests[selected_staff] = {}
+    
+    # 全スタッフの休み合計を計算（警告用）
+    def get_total_offs_per_day():
+        total_counts = {}
+        for staff in st.session_state.requests:
+            for date, state in st.session_state.requests[staff].items():
+                if state > 0: # 公休(1)または有給(2)
+                    total_counts[date] = total_counts.get(date, 0) + 1
+        return total_counts
+    
+    total_offs = get_total_offs_per_day()
+    
+    # カレンダー描画関数
+    def draw_calendar(month_label, start_day, end_day):
+        st.markdown(f"<div class='month-bar'>{month_label}月</div>", unsafe_allow_html=True)
+        
+        # 曜日ヘッダー
+        weekdays = ["月", "火",
